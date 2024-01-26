@@ -1,13 +1,40 @@
 ﻿#include <iostream>
 #include <winsock2.h>
-#include <Ws2tcpip.h>
+#include <thread>
+#include <vector>
+#include <string>
 #pragma comment(lib, "ws2_32.lib")
 
-int main() {
+void clientHandler(SOCKET clientSocket) 
+{
+    char recvMsg[1024];
+    while (true) {
+        int MsgByte = recv(clientSocket, recvMsg, sizeof(recvMsg), 0);
+        if (MsgByte > 0) {
+            recvMsg[MsgByte] = '\0';
+            std::cout << "Received from client: " << recvMsg << std::endl;
+
+            // Echo back to client
+            send(clientSocket, recvMsg, MsgByte, 0);
+        }
+        else if (MsgByte == 0) {
+            std::cerr << "Client disconnected" << std::endl;
+            break;
+        }
+        else {
+            std::cerr << "recv failed with error: " << WSAGetLastError() << std::endl;
+            break;
+        }
+    }
+    closesocket(clientSocket);
+}
+
+int main() 
+{
     WSADATA wsaData;
     WSAStartup(MAKEWORD(2, 2), &wsaData);
 
-    SOCKET ServSock = socket(PF_INET, SOCK_STREAM, 0);
+    SOCKET ServSock = socket(AF_INET, SOCK_STREAM, 0);
 
     SOCKADDR_IN ServAddr;
     ServAddr.sin_family = AF_INET;
@@ -17,21 +44,17 @@ int main() {
     bind(ServSock, (SOCKADDR*)&ServAddr, sizeof(ServAddr));
     listen(ServSock, 10);
 
-    std::cout << "Server listening...\n";
+    std::cout << "Server listening..." << std::endl;
 
-    SOCKET NewSock;
-    NewSock = accept(ServSock, nullptr, nullptr);
-
-    while (true)
+    std::vector<std::thread> threads;
+    while (true) 
     {
-        char RecvMsg[1000];
-        int resvByte = recv(NewSock, RecvMsg, sizeof(RecvMsg), 0);
-        RecvMsg[resvByte] = '\0';
-        std::cout << "Received: " << RecvMsg << std::endl;
-        send(NewSock, RecvMsg, sizeof(RecvMsg), 0);
+        SOCKET NewSock;
+        NewSock = accept(ServSock, nullptr, nullptr);
+        std::cout << "New client connected" << std::endl;
+        threads.emplace_back(clientHandler, NewSock);
     }
 
-    closesocket(NewSock);
     closesocket(ServSock);
     WSACleanup();
     return 0;

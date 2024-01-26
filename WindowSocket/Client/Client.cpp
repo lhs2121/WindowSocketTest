@@ -4,7 +4,8 @@
 #include <string>
 #pragma comment(lib, "ws2_32.lib")
 
-int main() {
+int main() 
+{
     WSADATA wsaData;
     WSAStartup(MAKEWORD(2, 2), &wsaData);
 
@@ -22,10 +23,18 @@ int main() {
         std::string msg;
         std::cout << "Enter message: ";
         std::getline(std::cin, msg);
+        if (msg.empty())
+        {
+            continue;
+        }
         send(ClientSocket, msg.c_str(), msg.size(), 0);
 
         char recvMsg[1024]{};
         int MsgByte = recv(ClientSocket, recvMsg, sizeof(recvMsg), 0);
+        if (MsgByte == -1)
+        {
+            continue;
+        }
         recvMsg[MsgByte] = '\0';
         std::cout << "Server response: " << recvMsg << std::endl;
     }
