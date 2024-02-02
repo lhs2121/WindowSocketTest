@@ -5,11 +5,16 @@
 #include <string>
 #pragma comment(lib, "ws2_32.lib")
 
+std::vector<std::thread> Threads;
+std::vector<SOCKET> Sockets;
+
 void clientHandler(SOCKET clientSocket) 
 {
     char recvMsg[1024];
-    while (true) {
+    while (true) 
+    {
         int MsgByte = recv(clientSocket, recvMsg, sizeof(recvMsg), 0);
+
         if (MsgByte > 0) {
             recvMsg[MsgByte] = '\0';
             std::cout << "Received from client: " << recvMsg << std::endl;
@@ -46,13 +51,21 @@ int main()
 
     std::cout << "Server listening..." << std::endl;
 
-    std::vector<std::thread> threads;
+ 
     while (true) 
     {
         SOCKET NewSock;
         NewSock = accept(ServSock, nullptr, nullptr);
-        std::cout << "New client connected" << std::endl;
-        threads.emplace_back(clientHandler, NewSock);
+        Sockets.push_back(NewSock);
+
+        for (size_t i = 0; i < Threads.size(); i++)
+        {
+            Threads[i].
+        }
+        
+        std::thread NewThread = std::thread(clientHandler, NewSock);
+        NewThread.detach();
+        Threads.emplace_back(NewThread);
     }
 
     closesocket(ServSock);
