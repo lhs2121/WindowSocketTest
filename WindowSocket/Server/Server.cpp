@@ -1,74 +1,117 @@
 ﻿#include <iostream>
-#include <winsock2.h>
 #include <thread>
-#include <vector>
-#include <string>
+#include <WinSock2.h>
+#include <WS2tcpip.h>
+#include <queue>
+#include <mutex>
+#include <condition_variable>
 #pragma comment(lib, "ws2_32.lib")
 
-std::vector<std::thread> Threads;
-std::vector<SOCKET> Sockets;
+constexpr int MaxBufferSize = 1024;
+constexpr int Port = 54000;
 
-void clientHandler(SOCKET clientSocket) 
+std::queue<std::string> messageQueue;
+std::mutex mtx;
+std::condition_variable cv;
+std::vector<SOCKET> ClientGroup;
+
+void HandleClientMessages(SOCKET clientSocket) 
 {
-    char recvMsg[1024];
+    char buffer[MaxBufferSize];
     while (true) 
     {
-        int MsgByte = recv(clientSocket, recvMsg, sizeof(recvMsg), 0);
+        int bytesReceived = recv(clientSocket, buffer, MaxBufferSize, 0);
 
-        if (MsgByte > 0) {
-            recvMsg[MsgByte] = '\0';
-            std::cout << "Received from client: " << recvMsg << std::endl;
-
-            // Echo back to client
-            send(clientSocket, recvMsg, MsgByte, 0);
-        }
-        else if (MsgByte == 0) {
-            std::cerr << "Client disconnected" << std::endl;
+        if (bytesReceived <= 0) {
+            std::cout << "Client disconnected." << std::endl;
             break;
         }
-        else {
-            std::cerr << "recv failed with error: " << WSAGetLastError() << std::endl;
-            break;
-        }
+
+        buffer[bytesReceived] = '\0';
+        std::string message(buffer);
+
+        // Add received message to server's message queue
+        std::lock_guard<std::mutex> lock(mtx);
+        messageQueue.push(message);
+        cv.notify_one();
     }
-    closesocket(clientSocket);
 }
 
-int main() 
+void ProcessMessagesFromQueue() 
 {
-    WSADATA wsaData;
-    WSAStartup(MAKEWORD(2, 2), &wsaData);
-
-    SOCKET ServSock = socket(AF_INET, SOCK_STREAM, 0);
-
-    SOCKADDR_IN ServAddr;
-    ServAddr.sin_family = AF_INET;
-    ServAddr.sin_addr.s_addr = INADDR_ANY;
-    ServAddr.sin_port = htons(10000);
-
-    bind(ServSock, (SOCKADDR*)&ServAddr, sizeof(ServAddr));
-    listen(ServSock, 10);
-
-    std::cout << "Server listening..." << std::endl;
-
- 
     while (true) 
     {
-        SOCKET NewSock;
-        NewSock = accept(ServSock, nullptr, nullptr);
-        Sockets.push_back(NewSock);
+        std::unique_lock<std::mutex> lock(mtx);
+        cv.wait(lock, [] { return !messageQueue.empty(); });
 
-        for (size_t i = 0; i < Threads.size(); i++)
+        // Process messages from the queue
+        std::string message = messageQueue.front();
+        messageQueue.pop();
+
+        for (size_t i = 0; i < ClientGroup.size(); i++)
         {
-            Threads[i].
+            send(ClientGroup[i], message.c_str(), message.size(), 0);
         }
         
-        std::thread NewThread = std::thread(clientHandler, NewSock);
-        NewThread.detach();
-        Threads.emplace_back(NewThread);
+
+        std::cout << "Received message: " << message << std::endl;
+    }
+}
+
+int main() {
+    WSADATA wsData;
+    WORD ver = MAKEWORD(2, 2);
+    int wsOk = WSAStartup(ver, &wsData);
+    if (wsOk != 0) {
+        std::cerr << "Can't initialize Winsock! Quitting" << std::endl;
+        return 1;
     }
 
-    closesocket(ServSock);
+    SOCKET listeningSocket = socket(AF_INET, SOCK_STREAM, 0);
+    if (listeningSocket == INVALID_SOCKET) {
+        std::cerr << "Can't create socket! Quitting" << std::endl;
+        WSACleanup();
+        return 1;
+    }
+
+    sockaddr_in hint;
+    hint.sin_family = AF_INET;
+    hint.sin_port = htons(Port);
+    hint.sin_addr.S_un.S_addr = INADDR_ANY;
+
+    if (bind(listeningSocket, (sockaddr*)&hint, sizeof(hint)) == SOCKET_ERROR) {
+        std::cerr << "Can't bind socket! Quitting" << std::endl;
+        closesocket(listeningSocket);
+        WSACleanup();
+        return 1;
+    }
+
+    if (listen(listeningSocket, SOMAXCONN) == SOCKET_ERROR) {
+        std::cerr << "Can't listen on socket! Quitting" << std::endl;
+        closesocket(listeningSocket);
+        WSACleanup();
+        return 1;
+    }
+
+    std::thread messageProcessor(ProcessMessagesFromQueue);
+
+    while (true) 
+    {
+        SOCKET clientSocket = accept(listeningSocket, nullptr, nullptr);
+        if (clientSocket == INVALID_SOCKET) {
+            std::cerr << "Can't accept client! Quitting" << std::endl;
+            break;
+        }
+
+        std::cout << "Client connected." << std::endl;
+        ClientGroup.push_back(clientSocket);
+        // Create a new thread for each client
+        std::thread clientThread(HandleClientMessages, clientSocket);
+        clientThread.detach();
+    }
+
+    closesocket(listeningSocket);
     WSACleanup();
+
     return 0;
 }
