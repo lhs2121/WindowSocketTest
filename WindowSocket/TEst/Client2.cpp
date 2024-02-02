@@ -18,9 +18,11 @@ std::condition_variable cv;
 void ReceiveMessages(SOCKET serverSocket)
 {
     char buffer[MaxBufferSize];
-    while (true) {
+    while (true)
+    {
         int bytesReceived = recv(serverSocket, buffer, MaxBufferSize, 0);
-        if (bytesReceived <= 0) {
+        if (bytesReceived <= 0)
+        {
             std::cout << "Disconnected from server." << std::endl;
             break;
         }
@@ -33,29 +35,34 @@ void ReceiveMessages(SOCKET serverSocket)
     }
 }
 
-void ProcessMessagesFromQueue() {
-    while (true) {
+void ProcessMessagesFromQueue()
+{
+    while (true)
+    {
         std::unique_lock<std::mutex> lock(mtx);
         cv.wait(lock, [] { return !messageQueue.empty(); });
 
         // Process messages from the queue
         std::string message = messageQueue.front();
         messageQueue.pop();
-        std::cout << "Server: " << message << std::endl;
+        std::cout << message << std::endl;
     }
 }
 
-int main() {
+int main()
+{
     WSADATA wsData;
     WORD ver = MAKEWORD(2, 2);
     int wsOk = WSAStartup(ver, &wsData);
-    if (wsOk != 0) {
+    if (wsOk != 0)
+    {
         std::cerr << "Can't initialize Winsock! Quitting" << std::endl;
         return 1;
     }
 
     SOCKET serverSocket = socket(AF_INET, SOCK_STREAM, 0);
-    if (serverSocket == INVALID_SOCKET) {
+    if (serverSocket == INVALID_SOCKET)
+    {
         std::cerr << "Can't create socket! Quitting" << std::endl;
         WSACleanup();
         return 1;
@@ -67,7 +74,8 @@ int main() {
     inet_pton(AF_INET, ServerIp, &hint.sin_addr);
 
     int connResult = connect(serverSocket, (sockaddr*)&hint, sizeof(hint));
-    if (connResult == SOCKET_ERROR) {
+    if (connResult == SOCKET_ERROR)
+    {
         std::cerr << "Can't connect to server! Quitting" << std::endl;
         closesocket(serverSocket);
         WSACleanup();
@@ -76,30 +84,36 @@ int main() {
 
     std::cout << "Connected to server!" << std::endl;
 
-    // Start receiving thread
-    std::thread recvThread(ReceiveMessages, serverSocket);
+    std::cout << "닉네임을 입력하세요 : ";
+    std::string NickName;
+    std::cin >> NickName;
 
-    // Start message processing thread
+    send(serverSocket, NickName.c_str(), NickName.size(), 0);
+
+    std::thread recvThread(ReceiveMessages, serverSocket);
     std::thread processThread(ProcessMessagesFromQueue);
 
-    // Send messages
     std::string userInput;
-    do {
+    do
+    {
         std::getline(std::cin, userInput);
-        if (userInput.size() > 0) {
-            int sendResult = send(serverSocket, userInput.c_str(), userInput.size(), 0);
-            if (sendResult == SOCKET_ERROR) {
+        std::string msg = NickName + " : " + userInput;
+        if (userInput.size() > 0)
+        {
+            int sendResult = send(serverSocket, msg.c_str(), msg.size(), 0);
+            if (sendResult == SOCKET_ERROR)
+            {
                 std::cerr << "Failed to send message to server!" << std::endl;
                 break;
             }
         }
     } while (userInput != "exit");
 
-    // Cleanup
+
+
     recvThread.detach();
     processThread.detach();
     closesocket(serverSocket);
     WSACleanup();
-
     return 0;
 }

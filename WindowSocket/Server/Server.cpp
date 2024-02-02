@@ -10,10 +10,15 @@
 constexpr int MaxBufferSize = 1024;
 constexpr int Port = 54000;
 
+struct Client
+{
+    SOCKET ClientSock;
+    std::string NickName;
+};
 std::queue<std::string> messageQueue;
 std::mutex mtx;
 std::condition_variable cv;
-std::vector<SOCKET> ClientGroup;
+std::vector<Client> ClientGroup;
 
 void HandleClientMessages(SOCKET clientSocket) 
 {
@@ -50,7 +55,7 @@ void ProcessMessagesFromQueue()
 
         for (size_t i = 0; i < ClientGroup.size(); i++)
         {
-            send(ClientGroup[i], message.c_str(), message.size(), 0);
+            send(ClientGroup[i].ClientSock, message.c_str(), message.size(), 0);
         }
         
 
@@ -58,7 +63,8 @@ void ProcessMessagesFromQueue()
     }
 }
 
-int main() {
+int main() 
+{
     WSADATA wsData;
     WORD ver = MAKEWORD(2, 2);
     int wsOk = WSAStartup(ver, &wsData);
@@ -97,16 +103,23 @@ int main() {
 
     while (true) 
     {
-        SOCKET clientSocket = accept(listeningSocket, nullptr, nullptr);
-        if (clientSocket == INVALID_SOCKET) {
-            std::cerr << "Can't accept client! Quitting" << std::endl;
-            break;
+        SOCKET NewSocket = accept(listeningSocket, nullptr, nullptr);
+
+        if (NewSocket == INVALID_SOCKET)
+        {
+            continue;
         }
 
         std::cout << "Client connected." << std::endl;
-        ClientGroup.push_back(clientSocket);
-        // Create a new thread for each client
-        std::thread clientThread(HandleClientMessages, clientSocket);
+        char nickname[1024];
+        int byte = recv(NewSocket, nickname, 1024, 0);
+        nickname[byte] = '\0';
+        Client NewClient;
+        NewClient.ClientSock = NewSocket;
+        NewClient.NickName = nickname;
+        ClientGroup.push_back(NewClient);
+        
+        std::thread clientThread(HandleClientMessages, NewSocket);
         clientThread.detach();
     }
 
