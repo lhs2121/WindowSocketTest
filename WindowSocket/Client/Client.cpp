@@ -45,6 +45,9 @@ void ProcessMessagesFromQueue() {
 }
 
 int main() {
+    char id[] = { 0 };
+    std::cin >> id;
+    
     WSADATA wsData;
     WORD ver = MAKEWORD(2, 2);
     int wsOk = WSAStartup(ver, &wsData);

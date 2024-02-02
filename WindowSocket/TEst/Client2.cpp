@@ -15,7 +15,8 @@ std::queue<std::string> messageQueue;
 std::mutex mtx;
 std::condition_variable cv;
 
-void ReceiveMessages(SOCKET serverSocket) {
+void ReceiveMessages(SOCKET serverSocket)
+{
     char buffer[MaxBufferSize];
     while (true) {
         int bytesReceived = recv(serverSocket, buffer, MaxBufferSize, 0);
