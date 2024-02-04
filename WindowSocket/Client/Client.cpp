@@ -5,6 +5,7 @@
 #include <queue>
 #include <mutex>
 #include <condition_variable>
+#include <string>
 #pragma comment(lib, "ws2_32.lib")
 
 constexpr int MaxBufferSize = 1024;
